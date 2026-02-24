@@ -1,0 +1,9 @@
+{
+  "name": "Vyapara Mithra",
+  "description": "AI-powered website builder for non-technical small business owners in India. Voice-first, vernacular support, and custom image generation.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation"
+  ]
+}
