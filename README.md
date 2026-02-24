@@ -14,6 +14,4 @@ Vyapara Mithra is a voice-first AI platform that helps small business owners gen
 - Tailwind CSS
 - Google Gemini API
 
-## Developed By
-Thanusree  
-S MD Zakeer
+
