@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Anyone with the link can read a generated website (needed for /shop/:id to work publicly)
+    match /websites/{id} {
+      allow read: if true;
+      allow write: if true; // Lock this down once you add auth
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
