@@ -374,9 +374,10 @@ const App: React.FC = () => {
               <div className="flex-1 flex flex-col slide-up overflow-hidden h-full">
                 <div className="flex justify-between items-center p-6 bg-slate-900/30 backdrop-blur-xl shrink-0 border-b border-white/5">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-emerald-600 rounded-2xl text-white shadow-lg">
-                      <Store className="w-6 h-6" />
-                    </div>
+                      <img src="/logo.png" 
+                      alt="Vyapara Mithra" 
+                      className="w-10 h-10 rounded-2xl shadow-lg object-cover"
+                    />
                     <span className="font-black text-xl text-white tracking-tight drop-shadow-md">
                       Vyapara Mithra
                     </span>
