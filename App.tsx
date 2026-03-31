@@ -369,15 +369,14 @@ const App: React.FC = () => {
   };
 
   const shareOnWhatsApp = () => {
-    if (!websiteId) {
-      alert("Website link not available yet. Please generate the website first.");
-      return;
-    }
-    const message = generateWhatsAppMessage();
-    // Use encodeURI (not encodeURIComponent) so emojis are preserved correctly on WhatsApp
-    const whatsappUrl = `https://wa.me/?text=${encodeURI(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
+  if (!websiteId) {
+    alert("Website link not available yet. Please generate the website first.");
+    return;
+  }
+  const message = generateWhatsAppMessage();
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  window.open(whatsappUrl, '_blank');
+};
 
   return (
     <Routes>

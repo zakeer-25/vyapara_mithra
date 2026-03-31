@@ -12,6 +12,8 @@ import {
   Timestamp,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
+import { getApp } from 'firebase/app';
 
 export interface VisitData {
   id?: string;
@@ -37,22 +39,35 @@ export async function startVisit(websiteId: string): Promise<string> {
 }
 
 // End a visit by updating with endTime and calculated duration
-export async function endVisit(websiteId: string, visitId: string): Promise<void> {
-  const visitRef = doc(db, 'websites', websiteId, 'visits', visitId);
-  const startSnap = await getDoc(visitRef);
-  if (!startSnap.exists()) return;
-  const startData = startSnap.data();
-  if (!startData.startTime) return;
-
-  const endTime = Timestamp.now();
-  const startMillis = startData.startTime.toMillis();
-  const endMillis = endTime.toMillis();
-  const duration = Math.round((endMillis - startMillis) / 1000);
-
-  await updateDoc(visitRef, {
-    endTime,
-    duration,
-  });
+export async function endVisitWithBeacon(websiteId: string, visitId: string, startTime: Date): Promise<void> {
+  const endTime = new Date();
+  const duration = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
+  const projectId = db.app.options.projectId;
+  const apiKey = db.app.options.apiKey;
+  if (!apiKey) {
+    console.error('API key not found, cannot record visit duration');
+    return;
+  }
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/websites/${websiteId}/visits/${visitId}`;
+  const body = {
+    fields: {
+      endTime: { timestampValue: { seconds: Math.floor(endTime.getTime() / 1000), nanos: (endTime.getTime() % 1000) * 1000000 } },
+      duration: { integerValue: duration },
+    },
+  };
+  try {
+    await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+      },
+      body: JSON.stringify(body),
+      keepalive: true,
+    });
+  } catch (err) {
+    console.error('Failed to update visit via beacon:', err);
+  }
 }
 
 // Get aggregated stats for a website

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { startVisit, endVisit } from "../services/analytics";
+import { startVisit, endVisitWithBeacon } from "../services/analytics";
 
 const WebsiteViewer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -11,7 +11,8 @@ const WebsiteViewer: React.FC = () => {
   const [notFound, setNotFound] = useState<boolean>(false);
   const visitIdRef = useRef<string | null>(null);
   const endedRef = useRef<boolean>(false);
-  const startedRef = useRef<boolean>(false); // Added
+  const startedRef = useRef<boolean>(false);
+  const startTimeRef = useRef<Date | null>(null);  // Store start time
 
   useEffect(() => {
     if (!id) {
@@ -20,13 +21,13 @@ const WebsiteViewer: React.FC = () => {
       return;
     }
 
-    // Start visit only once, even in StrictMode
     if (!startedRef.current) {
       startedRef.current = true;
       const start = async () => {
         try {
           const newVisitId = await startVisit(id);
           visitIdRef.current = newVisitId;
+          startTimeRef.current = new Date(); // Record start time
         } catch (err) {
           console.error("Failed to start visit analytics:", err);
         }
@@ -52,18 +53,18 @@ const WebsiteViewer: React.FC = () => {
     fetchData();
 
     const handleBeforeUnload = () => {
-      if (visitIdRef.current && id && !endedRef.current) {
+      if (visitIdRef.current && id && startTimeRef.current && !endedRef.current) {
         endedRef.current = true;
-        endVisit(id, visitIdRef.current).catch(console.error);
+        endVisitWithBeacon(id, visitIdRef.current, startTimeRef.current).catch(console.error);
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      if (visitIdRef.current && id && !endedRef.current) {
+      if (visitIdRef.current && id && startTimeRef.current && !endedRef.current) {
         endedRef.current = true;
-        endVisit(id, visitIdRef.current).catch(console.error);
+        endVisitWithBeacon(id, visitIdRef.current, startTimeRef.current).catch(console.error);
       }
     };
   }, [id]);
