@@ -1,16 +1,38 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { startVisit, endVisit } from "../services/analytics";
 
 const WebsiteViewer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [html, setHtml] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [notFound, setNotFound] = useState<boolean>(false);
+  const visitIdRef = useRef<string | null>(null);
+  const endedRef = useRef<boolean>(false);
+  const startedRef = useRef<boolean>(false); // Added
 
   useEffect(() => {
-    if (!id) { setLoading(false); setNotFound(true); return; }
+    if (!id) {
+      setLoading(false);
+      setNotFound(true);
+      return;
+    }
+
+    // Start visit only once, even in StrictMode
+    if (!startedRef.current) {
+      startedRef.current = true;
+      const start = async () => {
+        try {
+          const newVisitId = await startVisit(id);
+          visitIdRef.current = newVisitId;
+        } catch (err) {
+          console.error("Failed to start visit analytics:", err);
+        }
+      };
+      start();
+    }
 
     const fetchData = async () => {
       try {
@@ -27,8 +49,23 @@ const WebsiteViewer: React.FC = () => {
         setLoading(false);
       }
     };
-
     fetchData();
+
+    const handleBeforeUnload = () => {
+      if (visitIdRef.current && id && !endedRef.current) {
+        endedRef.current = true;
+        endVisit(id, visitIdRef.current).catch(console.error);
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (visitIdRef.current && id && !endedRef.current) {
+        endedRef.current = true;
+        endVisit(id, visitIdRef.current).catch(console.error);
+      }
+    };
   }, [id]);
 
   if (loading) {

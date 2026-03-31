@@ -6,6 +6,11 @@ import WebsiteViewer from "./components/WebsiteViewer";
 import VoiceInput from './components/VoiceInput';
 import GeneratedWebsite from './components/GeneratedWebsite';
 import HistoryModal from './components/HistoryModal';
+import WebsiteStats from './components/WebsiteStats';
+import { BarChart } from 'lucide-react';
+import { generateOwnerToken } from './services/analytics';
+
+// Inside Routes, add new route
 import { generateWebsite, editWebsite, getAddressFromCoords } from './services/geminiService';
 import { LANGUAGES, TRANSLATIONS } from './constants';
 import { BusinessData, LanguageCode, HistoryItem, Translation } from './types';
@@ -27,10 +32,11 @@ const BG_IMAGES = {
 import { collection, addDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
-const saveWebsite = async (html: string) => {
+const saveWebsite = async (html: string, ownerToken: string) => {
   const docRef = await addDoc(collection(db, "websites"), {
     html,
-    createdAt: new Date()
+    createdAt: new Date(),
+    ownerToken,
   });
   return docRef.id;
 };
@@ -169,6 +175,7 @@ const App: React.FC = () => {
   const [websiteId, setWebsiteId] = useState<string | null>(null);
   const t = TRANSLATIONS[lang];
   const [currentBg, setCurrentBg] = useState(BG_IMAGES.welcome);
+  const [ownerToken, setOwnerToken] = useState<string | null>(null);
 
   useEffect(() => {
     const savedLang = localStorage.getItem('vyapara_lang');
@@ -187,23 +194,31 @@ const App: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (!businessData.name?.trim()) { alert("Shop Name is mandatory!"); return; }
-    if (!businessData.address?.trim() && !businessData.lat) { alert("Address or Pinned Location is mandatory!"); return; }
-    setIsGenerating(true);
-    setStep(2);
-    const currentLangName = LANGUAGES.find(l => l.code === lang)?.name || 'English';
-    try {
-      const html = await generateWebsite(businessData, currentLangName);
-      setGeneratedHtml(html);
+  if (!businessData.name?.trim()) { alert("Shop Name is mandatory!"); return; }
+  if (!businessData.address?.trim() && !businessData.lat) { alert("Address or Pinned Location is mandatory!"); return; }
+  setIsGenerating(true);
+  setStep(2);
+  const currentLangName = LANGUAGES.find(l => l.code === lang)?.name || 'English';
+  try {
+    const html = await generateWebsite(businessData, currentLangName);
+    setGeneratedHtml(html);
 
-      const id = await saveWebsite(html);
-      setWebsiteId(id);
+    // Generate owner token and save website with it
+    const token = generateOwnerToken();
+    setOwnerToken(token);
+    const id = await saveWebsite(html, token);  // saveWebsite expects (html, ownerToken)
+    setWebsiteId(id);
 
-      const initialHistory: HistoryItem = { id: Date.now().toString(), html: html, instruction: t.initial_website, timestamp: Date.now() };
-      setHistory([initialHistory]);
-      setStep(3);
-    } catch (err) { console.error(err); setStep(1); } finally { setIsGenerating(false); }
-  };
+    const initialHistory: HistoryItem = { id: Date.now().toString(), html: html, instruction: t.initial_website, timestamp: Date.now() };
+    setHistory([initialHistory]);
+    setStep(3);
+  } catch (err) {
+    console.error(err);
+    setStep(1);
+  } finally {
+    setIsGenerating(false);
+  }
+};
 
   const handleEdit = async (customCommand?: string) => {
     const finalCommand = customCommand || editCommand;
@@ -311,7 +326,7 @@ const App: React.FC = () => {
     );
   };
 
-  const isFormComplete = !!(businessData.name?.trim() && (businessData.address?.trim() || businessData.lat));
+  const isFormComplete = !!(businessData.name?.trim() && (businessData.address?.trim() || businessData.lat) && businessData.phone?.trim());
 
   const generateWhatsAppMessage = () => {
     if (!websiteId) return "";
@@ -359,13 +374,14 @@ const App: React.FC = () => {
       return;
     }
     const message = generateWhatsAppMessage();
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    // Use encodeURI (not encodeURIComponent) so emojis are preserved correctly on WhatsApp
+    const whatsappUrl = `https://wa.me/?text=${encodeURI(message)}`;
     window.open(whatsappUrl, '_blank');
   };
 
   return (
     <Routes>
-      <Route path="/" element={
+      <Route path="/" element={ 
         <div className="relative min-h-screen max-w-lg mx-auto bg-slate-50 flex flex-col overflow-x-hidden">
           <div className="app-bg-image" style={{ backgroundImage: `url(${currentBg})`, filter: step >= 2 ? 'blur(12px)' : (step === 1 ? 'blur(8px)' : 'blur(4px)') }}></div>
           <div className="bg-overlay"></div>
@@ -455,6 +471,21 @@ const App: React.FC = () => {
                     <div className="space-y-4">
                       <div className="flex items-center gap-1.5 ml-4"><label className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">{t.lbl_name}</label><Asterisk className="w-3 h-3 text-rose-500" /><span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">({t.compulsory})</span></div>
                       <div className="border-4 border-slate-200/60 rounded-[2.2rem] bg-white shadow-inner overflow-hidden focus-within:border-emerald-500 transition-all"><VoiceInput value={businessData.name || ''} onChange={(text) => setBusinessData({ ...businessData, name: text })} onTranscript={(text) => setBusinessData(prev => ({ ...prev, name: text }))} language={lang} translations={t} placeholder={t.placeholder_name} /></div>
+                    </div>
+                    <div className="pt-10 border-t-2 border-slate-50 space-y-4">
+                      <div className="flex items-center gap-1.5 ml-4"><label className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">{t.lbl_phone}</label><Asterisk className="w-3 h-3 text-rose-500" /><span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">({t.compulsory})</span></div>
+                      <div className="border-4 border-slate-200/60 rounded-[2.2rem] bg-white shadow-inner overflow-hidden focus-within:border-emerald-500 transition-all">
+                        <div className="w-full flex px-6 py-5 items-center gap-3">
+                          <span className="text-2xl">📞</span>
+                          <input
+                            type="tel"
+                            value={businessData.phone || ''}
+                            onChange={(e) => setBusinessData({ ...businessData, phone: e.target.value })}
+                            placeholder="Your phone number"
+                            className="w-full text-2xl font-black bg-transparent focus:ring-0 outline-none placeholder-slate-300 text-slate-800"
+                          />
+                        </div>
+                      </div>
                     </div>
                     <div className="pt-10 border-t-2 border-slate-50 space-y-4">
                       <div className="flex items-center gap-1.5 ml-4"><label className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">{t.lbl_address}</label><Asterisk className="w-3 h-3 text-rose-500" /><span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">({t.compulsory})</span></div>
@@ -605,7 +636,33 @@ const App: React.FC = () => {
                        <Share2 className="w-5 h-5" />
                        Share
                      </button>
+                     <button
+                        onClick={() => {
+                          if (websiteId && ownerToken) {
+                            window.open(`/shop/${websiteId}/stats?token=${ownerToken}`, '_blank');
+                          } else {
+                            alert("Website link not available yet. Please generate the website first.");
+                          }
+                        }}
+                        className="flex-1 h-12 bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"
+                      >
+                        <BarChart className="w-5 h-5" />
+                        View Stats
+                      </button>
                    </div>
+                   <div className="mb-4 p-3 bg-white/10 rounded-xl">
+                      <p className="text-xs text-white/60 mb-1">🔐 Your private stats link (keep this safe):</p>
+                      <p className="text-xs text-emerald-300 break-all">{`${window.location.origin}/shop/${websiteId}/stats?token=${ownerToken}`}</p>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/shop/${websiteId}/stats?token=${ownerToken}`);
+                          alert("Stats link copied!");
+                        }}
+                        className="mt-2 text-xs bg-white/20 px-3 py-1 rounded-full"
+                      >
+                        Copy Link
+                      </button>
+                    </div>
                    <button 
                      onClick={() => setIsFinalized(false)}
                      className="mt-4 w-full h-12 bg-white text-slate-900 font-bold rounded-xl active:scale-95 transition-all shadow-xl"
@@ -629,6 +686,7 @@ const App: React.FC = () => {
       } />
 
       <Route path="/shop/:id" element={<WebsiteViewer />} />
+      <Route path="/shop/:id/stats" element={<WebsiteStats />} />
     </Routes>
   );
 };
