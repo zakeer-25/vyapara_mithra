@@ -2,52 +2,87 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { BusinessData } from "../types"; 
 import { TRANSLATIONS as UI_STRINGS } from "../constants";
 
-// Vite exposes env variables with VITE_ prefix
-const apiKey = import.meta.env.VITE_API_KEY;
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
 if (!apiKey) {
-  console.error("Missing VITE_API_KEY in environment variables");
+  console.error("Missing VITE_GEMINI_API_KEY in environment variables");
 }
 
 const ai = new GoogleGenAI({ apiKey });
 
 const THEMES = [
-  "Royal Gold (emerald & gold gradients, serif headers, luxurious glass cards, deep navy background)",
-  "Ocean Premium (navy to cyan gradients, modern sans-serif, frosted glass, light blue accents)",
-  "Modern Sunset (orange to rose gradients, soft blurs, elegant fonts, warm cream background)",
-  "Midnight Sleek (black to indigo gradients, neon green accents, sharp high-tech look)",
-  "Nature Wellness (sage to olive gradients, organic shapes, calming beige background)",
-  "Bold Retail (bright red to orange gradients, heavy black fonts, high-contrast cards)",
-  "Soft Pastel (pink to lavender gradients, rounded corners, friendly playful fonts)",
-  "Minimal Mono (monochrome gray scale with a single teal accent, clean lines)",
-  "Festive Vibes (purple to fuchsia gradients, festive emojis, vibrant yellow accents)",
-  "Earthy Tones (brown to terracotta gradients, rustic textures, warm sand background)"
+  "Royal Gold: deep navy (#0f172a) full-page background, emerald-to-gold gradient hero, gold shimmer cards, serif headings",
+  "Ocean Premium: midnight blue (#0c1445) full-page background, cyan-to-blue gradient hero, frosted glass cards, bold sans headings",
+  "Modern Sunset: deep rose (#1a0a0f) full-page background, orange-to-pink gradient hero, warm glass cards, elegant rounded headings",
+  "Midnight Sleek: pure black (#050505) full-page background, indigo-to-violet gradient hero, neon green accents, sharp tech look",
+  "Nature Wellness: deep forest (#0a1a0f) full-page background, sage-to-emerald gradient hero, soft organic cards, calm rounded headings",
+  "Bold Retail: deep crimson (#1a0505) full-page background, red-to-orange gradient hero, high-contrast white cards, heavy bold headings",
+  "Festive Vibes: deep purple (#12004a) full-page background, fuchsia-to-violet gradient hero, gold shimmer cards, festive bold headings",
+  "Earthy Tones: deep brown (#1a0f05) full-page background, amber-to-terracotta gradient hero, warm sand cards, rustic serif headings",
+  "Royal Indigo: deep indigo (#07001a) full-page background, purple-to-pink gradient hero, glass cards with purple glow, elegant headings",
+  "Tropical Luxury: deep teal (#001a1a) full-page background, teal-to-lime gradient hero, frosted cards, vibrant tropical accents"
 ];
 
 const SYSTEM_PROMPT = `
-You are Vyapara Mithra, a world-class UI/UX Designer and Conversion Copywriter. 
-Your goal is to build an "Ultra-Premium" business website for Indian entrepreneurs.
+You are Vyapara Mithra — a world-class UI/UX designer building ULTRA-PREMIUM mobile business websites for Indian entrepreneurs using Tailwind CSS inline classes only.
 
-**Design Philosophy**: Every website must feel unique and tailored to the business type. Vary the overall color scheme, layout arrangement, and visual flair for each request. Do not repeat the same background colors or section ordering.
+══════════════════════════════════════
+CRITICAL: FULL PAGE BACKGROUND — NON-NEGOTIABLE
+══════════════════════════════════════
+The OUTERMOST wrapper div MUST have a DARK gradient background that covers the ENTIRE page:
+  class="min-h-screen w-full bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#0f172a] font-sans"
+Adjust the gradient colors to match the theme. NEVER use bg-white or bg-gray-* as the page background.
 
-DESIGN RULES (STRICT):
-1. GRADIENT TEXT: Use 'bg-clip-text text-transparent bg-gradient-to-r from-...' for all Shop Names and Titles.
-2. GLASSMORPHISM & WRAPPING: Use 'bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl rounded-[2.5rem] overflow-hidden max-w-full' for cards.
-3. TEXT OVERFLOW PROTECTION: Every single text tag (h1, h2, p, span, button) MUST have 'break-words whitespace-normal' classes. Never use 'whitespace-nowrap'.
-4. RESPONSIVE FONTS: Use responsive sizes. Titles should be 'text-3xl md:text-5xl' (NOT fixed text-7xl). Paragraphs should be 'text-base md:text-lg'.
-5. NO GAPS: Use 'py-6' for section padding. Do NOT use top/bottom margins (mt- or mb-) on main section containers.
-6. EMOJI ICONOGRAPHY: Start sections with ONE 'text-6xl md:text-7xl' hero emoji centered.
-7. PRODUCT GRID: Use 'grid grid-cols-1 md:grid-cols-2 gap-4' and ensure cards don't overflow parent containers.
+══════════════════════════════════════
+HERO SECTION — MUST BE SPECTACULAR
+══════════════════════════════════════
+- Full-width hero with bold gradient background (different from page bg)
+- Business name as HUGE gradient text: class="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-yellow-400 to-emerald-400 break-words"
+- Tagline in white/light color, max 10 words
+- One large centered emoji (text-7xl)
+- "Call Now" CTA button: class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black px-8 py-4 rounded-full shadow-lg shadow-emerald-500/30 text-lg break-words"
 
-WORD LIMITS:
-- Hero: 40 words.
-- About: 50 words.
-- Products: 15 words per card.
-- Contact: 15 words.
+══════════════════════════════════════
+CARDS & SECTIONS — GLASSMORPHISM
+══════════════════════════════════════
+ALL cards MUST use: class="bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl p-6 break-words"
+Section headings: class="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 to-white break-words"
+Body text: class="text-white/80 text-base leading-relaxed break-words"
 
-STRICT CONSTRAINTS:
-- Use Tailwind CSS.
-- Output ONLY raw <div> structure. No markdown.
-- Ensure all content fits within a mobile screen width.
+══════════════════════════════════════
+BUTTONS — ALL MUST BE STYLED
+══════════════════════════════════════
+Call Now button: class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-emerald-500/30 text-xl break-words"
+WhatsApp button: class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black py-4 rounded-2xl shadow-lg text-xl break-words"
+Map/Location button: class="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/30 text-xl break-words"
+NEVER leave any button or link without color/gradient styling.
+
+══════════════════════════════════════
+MAP SECTION — ALWAYS STYLED
+══════════════════════════════════════
+The map/location section MUST have a styled "Open In Maps" button like this:
+<a href="{mapsUrl}" target="_blank" class="block w-full text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/30 text-xl break-words no-underline">
+  📍 Open In Maps
+</a>
+NEVER render a plain unstyled link for the map.
+
+══════════════════════════════════════
+PRODUCT CARDS — VIBRANT
+══════════════════════════════════════
+Each product card: class="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-5 flex flex-col items-center text-center gap-3 break-words"
+Product emoji: class="text-5xl"
+Product name: class="text-lg font-black text-white break-words"
+Product description: class="text-white/70 text-sm break-words"
+
+══════════════════════════════════════
+STRICT RULES
+══════════════════════════════════════
+1. ALL text elements MUST have 'break-words whitespace-normal' — NO exceptions.
+2. NEVER use bg-white, bg-gray-100, or light backgrounds for the page — dark themes ONLY.
+3. NEVER output plain unstyled links — every <a> tag needs gradient/color classes.
+4. Output ONLY the raw <div>...</div> structure. No markdown, no \`\`\`html fences.
+5. Use Tailwind CSS utility classes only — no custom CSS, no <style> tags.
+6. All sections use py-8 px-4 padding minimum.
+7. Responsive text: headings text-3xl md:text-5xl, body text-base md:text-lg.
 `;
 
 const sanitizeHtml = (raw: string): string => {
@@ -72,34 +107,37 @@ export const generateWebsite = async (data: BusinessData, language: string): Pro
   }
 
   const prompt = `
-    Build a Premium Website for:
-    Name: ${data.name || 'Apna Business'}
-    Work: ${data.description}
-    Phone: ${data.phone}
-    Location: ${data.address || 'Local Area'}
-    Map: ${mapsUrl}
-    Language: ${language}
-    
-    Style Instructions:
-    - Theme: ${randomTheme}
-    - Style Seed: ${styleSeed} (use this number to influence color choices and layout variations – different seeds should produce different designs)
-    
-    REQUIRED SECTIONS:
-    1. Hero: Gradient name, tagline, big icon. (Use break-words)
-    2. About Us: Persuasive quality story. (Use break-words)
-    3. Featured Products: 3 specific items relevant to ${data.description}. (Use break-words)
-    4. Visit Us: Address and "Call Now" button. (Use break-words)
+Build an ULTRA-PREMIUM dark-themed business website for:
 
-    SPACING RULE: py-6 for sections. Ensure text stays INSIDE borders using break-words.
-  `;
+Business Name: ${data.name || 'Apna Business'}
+Business Type: ${data.description}
+Phone: ${data.phone}
+Address: ${cleanAddress || 'Local Area'}
+Maps URL: ${mapsUrl}
+Language: ${language}
+Theme: ${randomTheme}
+Style Seed: ${styleSeed}
+
+REQUIRED SECTIONS (in this order):
+1. HERO — Dark gradient background, huge gradient business name, tagline, emoji, Call Now button
+2. ABOUT US — Glassmorphism card, persuasive 40-word story about the business
+3. FEATURED ITEMS — 3 product/service cards relevant to "${data.description}" with emoji, name, short description
+4. VISIT US — Address text + styled "📍 Open In Maps" button linking to: ${mapsUrl} + styled "📞 Call Now" button linking to: tel:${data.phone}
+
+CRITICAL REMINDERS:
+- Page background MUST be dark gradient (not white)
+- Map button MUST be styled with blue gradient classes
+- ALL buttons must have gradient + shadow classes
+- ALL text must have break-words class
+- Cards must use glassmorphism (bg-white/10 backdrop-blur-xl)
+`;
 
   try {
-    console.log("Generating website with prompt:", prompt); // Debug log
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // revert to the working model
+      model: 'gemini-2.5-flash',
       config: { 
         systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.9,
+        temperature: 0.85,
       },
       contents: prompt,
     });
@@ -108,12 +146,14 @@ export const generateWebsite = async (data: BusinessData, language: string): Pro
     if (!html) throw new Error("AI generation returned nothing");
     return html;
   } catch (error) {
-    console.error("Generation error:", error); // Now you'll see the real error in console
+    console.error("Generation error:", error);
     const fallback = UI_STRINGS['en'];
-    return `<div class="p-8 text-center bg-white rounded-[3rem] shadow-2xl border-4 border-slate-100 mx-6 my-10 break-words">
-      <div class="text-6xl mb-6">✨</div>
-      <h2 class="text-2xl font-black text-slate-800">${fallback.mithra_break}</h2>
-      <p class="text-slate-500 mt-4 text-lg font-bold">${fallback.retry_msg}</p>
+    return `<div class="min-h-screen w-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-8">
+      <div class="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 text-center break-words max-w-sm">
+        <div class="text-6xl mb-6">✨</div>
+        <h2 class="text-2xl font-black text-white break-words">${fallback.mithra_break}</h2>
+        <p class="text-white/70 mt-4 text-lg break-words">${fallback.retry_msg}</p>
+      </div>
     </div>`;
   }
 };
@@ -121,12 +161,12 @@ export const generateWebsite = async (data: BusinessData, language: string): Pro
 export const editWebsite = async (currentHtml: string, instruction: string): Promise<string> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash',
       config: { 
         systemInstruction: SYSTEM_PROMPT,
         temperature: 0.7
       },
-      contents: `Current UI: ${currentHtml}\n\nChange: ${instruction}\n\nTask: Maintain premium aesthetic, TIGHT vertical spacing (py-6), and ensure ALL text has 'break-words'.`,
+      contents: `Current website HTML:\n${currentHtml}\n\nUser instruction: ${instruction}\n\nTask: Apply the requested change while keeping the dark premium theme, glassmorphism cards, gradient buttons, and ALL text with break-words class. Return ONLY the updated raw <div>...</div>.`,
     });
     return sanitizeHtml(response.text || currentHtml);
   } catch (error) {
