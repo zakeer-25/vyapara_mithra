@@ -176,9 +176,11 @@ export const editWebsite = async (currentHtml: string, instruction: string): Pro
 };
 
 export const getAddressFromCoords = async (lat: number, lng: number, language: string): Promise<string> => {
+  const fallbackGps = `${lat.toFixed(6)}, ${lng.toFixed(6)}`; // e.g. "12.971599, 77.594566"
+
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: 'gemini-2.5-flash',
       contents: `I need the PINPOINT EXACT STOREFRONT address for coordinates: ${lat}, ${lng}. 
       IGNORE generic locality-only results. Find the EXACT building name, shop number (if visible), floor, and precise street. 
       CRITICAL: Identify the absolute NEAREST landmark (e.g., 'Directly opposite XYZ Medical', 'Adjacent to ABC Temple'). 
@@ -196,8 +198,31 @@ export const getAddressFromCoords = async (lat: number, lng: number, language: s
     });
 
     const result = response.text?.trim();
-    return result || `Pinpoint Location: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+    // List of phrases that indicate the AI failed to return a valid address
+    const invalidIndicators = [
+      "sorry",
+      "unable to",
+      "cannot",
+      "not found",
+      "don't have",
+      "do not have",
+      "address not found",
+      "google maps tool"
+    ];
+
+    const isInvalid = !result ||
+      result.length < 5 ||
+      invalidIndicators.some(phrase => result.toLowerCase().includes(phrase));
+
+    if (isInvalid) {
+      console.warn("Address resolution failed, using GPS fallback.");
+      return fallbackGps;
+    }
+
+    return result;
   } catch (error) {
-    return `Verified Store Spot`;
+    console.error("getAddressFromCoords error:", error);
+    return fallbackGps;
   }
 };

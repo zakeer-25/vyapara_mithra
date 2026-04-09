@@ -263,16 +263,27 @@ const App: React.FC = () => {
       setDetectionStage('Pinpoint Exact!');
 
       try {
-        let addr = await getAddressFromCoords(latitude, longitude, LANGUAGES.find(l => l.code === lang)?.name || 'English');
-        if (addr && (addr.includes("The Google Maps tool") || addr.includes("I am unable to pinpoint"))) {
-          addr = "📍 View on map in our website!";
-        }
+        // Try to resolve a human-readable address; fall back to raw GPS coords
+        const gpsLabel = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        let addr = gpsLabel;
+        const resolved = await getAddressFromCoords(latitude, longitude, LANGUAGES.find(l => l.code === lang)?.name || 'English');
+        const isApology = !resolved ||
+          resolved.includes("I am sorry") ||
+          resolved.includes("I'm sorry") ||
+          resolved.includes("unable to") ||
+          resolved.includes("cannot") ||
+          resolved.includes("don't have") ||
+          resolved.includes("do not have") ||
+          resolved.includes("Google Maps tool") ||
+          resolved.length < 5;
+        if (!isApology) addr = resolved;
         if (callback) callback(addr, latitude, longitude);
         else setBusinessData(prev => ({ ...prev, address: addr, lat: latitude, lng: longitude }));
       } catch (err) {
-        const fallback = `📍 View on map in our website!`;
-        if (callback) callback(fallback, latitude, longitude);
-        else setBusinessData(prev => ({ ...prev, address: fallback, lat: latitude, lng: longitude }));
+        // Even on full failure, lock GPS coords so the map still works
+        const gpsLabel = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        if (callback) callback(gpsLabel, latitude, longitude);
+        else setBusinessData(prev => ({ ...prev, address: gpsLabel, lat: latitude, lng: longitude }));
       } finally {
         setIsDetecting(false);
       }
@@ -326,45 +337,89 @@ const App: React.FC = () => {
     );
   };
 
-  const isFormComplete = !!(businessData.name?.trim() && (businessData.address?.trim() || businessData.lat) && businessData.phone?.trim());
+  const isFormComplete = !!(businessData.name?.trim() && (businessData.address?.trim() || businessData.lat) && businessData.phone?.trim() && /^[1-9][0-9]{9}$/.test(businessData.phone));
+
+  const extractOfferingsFromHtml = (html: string): string => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // Look for product/service card names — typically inside headings within card elements
+      const cardHeadings = doc.querySelectorAll(
+        '[class*="card"] h2, [class*="card"] h3, [class*="card"] p, ' +
+        '[class*="product"] h2, [class*="product"] h3, [class*="product"] p, ' +
+        '[class*="item"] h2, [class*="item"] h3, [class*="service"] h2, [class*="service"] h3'
+      );
+
+      const items: string[] = [];
+      cardHeadings.forEach((el) => {
+        const text = el.textContent?.trim();
+        if (text && text.length > 2 && text.length < 80 && !items.includes(text)) {
+          items.push(text);
+        }
+      });
+
+      // Fallback: grab all h3 text (usually product names in Gemini-generated sites)
+      if (items.length === 0) {
+        doc.querySelectorAll('h3').forEach((el) => {
+          const text = el.textContent?.trim();
+          if (text && text.length > 2 && text.length < 80 && !items.includes(text)) {
+            items.push(text);
+          }
+        });
+      }
+
+      if (items.length > 0) {
+        // Deduplicate and limit to 5 items
+        return items.slice(0, 5).map(i => `• ${i}`).join('\n');
+      }
+    } catch (_) {}
+    return '';
+  };
 
   const generateWhatsAppMessage = () => {
     if (!websiteId) return "";
     const link = `${window.location.origin}/shop/${websiteId}`;
     const businessName = businessData.name?.trim() || "our new business";
-    const description = businessData.description?.trim() || "";
-    let address = businessData.address?.trim() || "";
     const phone = businessData.phone?.trim() || "";
     const email = businessData.email?.trim() || "";
 
-    // Clean address if it contains error messages
-    if (address && (address.includes("Exact Shop Spot") || address.includes("The Google Maps tool") || address.includes("I am unable to pinpoint"))) {
-      address = "📍 View on map in our website!";
+    // Build Google Maps link from GPS coords or address
+    let mapsLink = '';
+    if (businessData.lat && businessData.lng) {
+      mapsLink = `https://www.google.com/maps/search/?api=1&query=${businessData.lat.toFixed(7)},${businessData.lng.toFixed(7)}`;
+    } else if (businessData.address?.trim()) {
+      const addr = businessData.address.trim();
+      if (!addr.includes("View on map") && !addr.includes("Exact Shop Spot") && !addr.includes("Google Maps tool")) {
+        mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+      }
     }
 
-    // Simplified message with only universal emojis and no markdown
+    // Extract what-we-offer content from the GENERATED website HTML (not raw user input)
+    const offerings = generatedHtml ? extractOfferingsFromHtml(generatedHtml) : '';
+
     let message = "🎉 Exciting News! 🎉\n\n";
     message += `I'm thrilled to announce the launch of my new website for ${businessName}! 🚀✨\n\n`;
-    
-    if (description) {
-      message += `⭐ What We Offer:\n${description}\n\n`;
+
+    if (offerings) {
+      message += `⭐ What We Offer:\n${offerings}\n\n`;
     }
-    
-    if (address) {
-      message += `📍 Find Us At:\n${address}\n\n`;
+
+    if (mapsLink) {
+      message += `📍 Find Us On Maps:\n${mapsLink}\n\n`;
     }
-    
+
     if (phone || email) {
       message += `📞 Get in Touch:\n`;
       if (phone) message += `📱 Phone: ${phone}\n`;
       if (email) message += `✉️ Email: ${email}\n`;
       message += `\n`;
     }
-    
+
     message += `✨ Explore our website now and discover amazing deals, services, and more! ✨\n\n`;
     message += `🔗 Visit: ${link}\n\n`;
     message += `Can't wait to serve you! 😊👍`;
-    
+
     return message;
   };
 
@@ -479,8 +534,17 @@ const App: React.FC = () => {
                           <input
                             type="tel"
                             value={businessData.phone || ''}
-                            onChange={(e) => setBusinessData({ ...businessData, phone: e.target.value })}
-                            placeholder="Your phone number"
+                            onChange={(e) => {
+                              // Strip non-digits, block leading zero, cap at 10 digits
+                              const raw = e.target.value.replace(/\D/g, '');
+                              const noLeadingZero = raw.startsWith('0') ? raw.slice(1) : raw;
+                              const capped = noLeadingZero.slice(0, 10);
+                              setBusinessData({ ...businessData, phone: capped });
+                            }}
+                            placeholder="10-digit mobile number"
+                            maxLength={10}
+                            inputMode="numeric"
+                            pattern="[1-9][0-9]{9}"
                             className="w-full text-2xl font-black bg-transparent focus:ring-0 outline-none placeholder-slate-300 text-slate-800"
                           />
                         </div>
