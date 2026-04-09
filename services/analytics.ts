@@ -33,16 +33,12 @@ export async function startVisit(websiteId: string): Promise<string> {
     endTime: null,
     duration: null,
   });
+  console.log(`[Analytics] Visit started: ${visitDoc.id}`);
   return visitDoc.id;
 }
 
 /**
- * End a visit — tries Firebase SDK first (works when page is still alive),
- * then falls back to navigator.sendBeacon for the beforeunload case.
- *
- * The Firestore REST PATCH URL must include updateMask so only endTime +
- * duration are written — otherwise the full document is replaced and
- * startTime is lost, which causes "In progress" forever in the stats page.
+ * End a visit — tries Firebase SDK first, then falls back to sendBeacon.
  */
 export async function endVisit(
   websiteId: string,
@@ -52,23 +48,24 @@ export async function endVisit(
   const endTime = new Date();
   const duration = Math.max(1, Math.round((endTime.getTime() - startTime.getTime()) / 1000));
 
+  console.log(`[Analytics] Ending visit ${visitId} with duration ${duration}s`);
+
   try {
-    // Preferred path: Firebase SDK updateDoc (works when page is still active)
     const visitRef = doc(db, 'websites', websiteId, 'visits', visitId);
     await updateDoc(visitRef, {
       endTime: Timestamp.fromDate(endTime),
       duration,
     });
-  } catch {
-    // SDK path failed (e.g. page is unloading) — fall back to sendBeacon
-    endVisitWithBeacon(websiteId, visitId, startTime);
+    console.log(`[Analytics] Visit ${visitId} updated via SDK`);
+  } catch (error) {
+    console.warn('[Analytics] SDK update failed, falling back to beacon:', error);
+    // Fall back to beacon (does not return a promise rejection)
+    endVisitWithBeacon(websiteId, visitId, startTime).catch(console.error);
   }
 }
 
 /**
  * Beacon-based fallback for beforeunload / pagehide.
- * Uses the Firestore REST PATCH endpoint with `updateMask.fieldPaths` so that
- * ONLY endTime and duration fields are updated — startTime is preserved.
  */
 export function endVisitWithBeacon(
   websiteId: string,
@@ -83,12 +80,11 @@ export function endVisitWithBeacon(
     const apiKey = db.app.options.apiKey;
 
     if (!projectId || !apiKey) {
+      console.error('[Analytics] Missing Firebase config for beacon');
       reject(new Error('Firebase config not available'));
       return;
     }
 
-    // CRITICAL: include updateMask so only these two fields are written.
-    // Without updateMask, the full document is replaced and startTime is erased.
     const url =
       `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents` +
       `/websites/${websiteId}/visits/${visitId}` +
@@ -110,9 +106,12 @@ export function endVisitWithBeacon(
 
     const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
     const sent = navigator.sendBeacon(url, blob);
+
     if (sent) {
+      console.log(`[Analytics] Beacon sent for visit ${visitId} (duration: ${duration}s)`);
       resolve();
     } else {
+      console.error('[Analytics] Beacon failed to send');
       reject(new Error('sendBeacon failed'));
     }
   });
@@ -130,16 +129,24 @@ export async function getWebsiteStats(websiteId: string) {
   snapshot.forEach((document: QueryDocumentSnapshot) => {
     const data = document.data();
     totalVisits++;
-    if (data.duration) totalDuration += Number(data.duration);
+
+    // Ensure duration is treated as a number
+    const durationValue = data.duration ? Number(data.duration) : 0;
+    if (durationValue > 0) {
+      totalDuration += durationValue;
+    }
+
     visits.push({
       id: document.id,
       startTime: data.startTime?.toDate?.() ?? new Date(),
       endTime: data.endTime?.toDate?.(),
-      duration: data.duration ? Number(data.duration) : undefined,
+      duration: durationValue > 0 ? durationValue : undefined,
     });
   });
 
   const avgDuration = totalVisits > 0 ? Math.round(totalDuration / totalVisits) : 0;
+
+  console.log(`[Analytics] Stats for ${websiteId}: ${totalVisits} visits, avg ${avgDuration}s`);
 
   return { totalVisits, avgDuration, visits };
 }
