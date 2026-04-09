@@ -2,16 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <!-- Improved viewport: allows zoom for accessibility, adds viewport-fit=cover for notched devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Vyapara Mithra - Your Business Friend</title>
 
-    <link rel="icon" type="image/png" href="/logo.png" />
+    <!-- Apple touch icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
+
+    <!-- PWA / Home Screen meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="application-name" content="Vyapara Mithra" />
 
+    <!-- Standard favicon -->
+    <link rel="icon" type="image/png" href="/logo.png" />
+
+    <!-- Tailwind (for development only; in production you should use the built CSS) -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts with display=swap -->
     <link href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- Custom base styles (keep these for quick overrides) -->
     <style>
       :root {
         --primary-green: #059669;
@@ -72,6 +85,8 @@
         color: white;
       }
     </style>
+
+    <!-- Your compiled Tailwind / custom CSS (includes safe area, tap highlight fixes) -->
     <link rel="stylesheet" href="/index.css">
   </head>
   <body>
