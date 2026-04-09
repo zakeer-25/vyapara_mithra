@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { startVisit, endVisit, endVisitWithBeacon } from "../services/analytics";
+import { startVisit, endVisit } from "../services/analytics";
 
 const WebsiteViewer: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,66 +12,66 @@ const WebsiteViewer: React.FC = () => {
   const visitIdRef = useRef<string | null>(null);
   const endedRef = useRef<boolean>(false);
   const startedRef = useRef<boolean>(false);
-  const startTimeRef = useRef<Date | null>(null);  // Store start time
+  const startTimeRef = useRef<Date | null>(null);
 
   useEffect(() => {
-  if (!id) {
-    setLoading(false);
-    setNotFound(true);
-    return;
-  }
+    if (!id) {
+      setLoading(false);
+      setNotFound(true);
+      return;
+    }
 
-  if (!startedRef.current) {
-    startedRef.current = true;
-    const start = async () => {
+    if (!startedRef.current) {
+      startedRef.current = true;
+      const start = async () => {
+        try {
+          const newVisitId = await startVisit(id);
+          visitIdRef.current = newVisitId;
+          startTimeRef.current = new Date();
+        } catch (err) {
+          console.error("Failed to start visit analytics:", err);
+        }
+      };
+      start();
+    }
+
+    const fetchData = async () => {
       try {
-        const newVisitId = await startVisit(id);
-        visitIdRef.current = newVisitId;
-        startTimeRef.current = new Date();
+        const docSnap = await getDoc(doc(db, "websites", id));
+        if (docSnap.exists()) {
+          setHtml(docSnap.data().html as string);
+        } else {
+          setNotFound(true);
+        }
       } catch (err) {
-        console.error("Failed to start visit analytics:", err);
+        console.error("Failed to load website:", err);
+        setNotFound(true);
+      } finally {
+        setLoading(false);
       }
     };
-    start();
-  }
+    fetchData();
 
-  const fetchData = async () => {
-    try {
-      const docSnap = await getDoc(doc(db, "websites", id));
-      if (docSnap.exists()) {
-        setHtml(docSnap.data().html as string);
-      } else {
-        setNotFound(true);
+    const handleUnload = () => {
+      if (visitIdRef.current && id && startTimeRef.current && !endedRef.current) {
+        endedRef.current = true;
+        // endVisit now handles both SDK and fallback (fetch keepalive)
+        endVisit(id, visitIdRef.current, startTimeRef.current).catch(console.error);
       }
-    } catch (err) {
-      console.error("Failed to load website:", err);
-      setNotFound(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-  fetchData();
+    };
 
-  // beacon fires on unload (page is closing — SDK can't complete async calls)
-  const handleUnload = () => {
-    if (visitIdRef.current && id && startTimeRef.current && !endedRef.current) {
-      endedRef.current = true;
-      endVisitWithBeacon(id, visitIdRef.current, startTimeRef.current).catch(console.error);
-    }
-  };
-  window.addEventListener("beforeunload", handleUnload);
-  window.addEventListener("pagehide", handleUnload);
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
 
-  return () => {
-    window.removeEventListener("beforeunload", handleUnload);
-    window.removeEventListener("pagehide", handleUnload);
-    // React unmount (e.g. SPA navigation) — SDK is still alive, use it
-    if (visitIdRef.current && id && startTimeRef.current && !endedRef.current) {
-      endedRef.current = true;
-      endVisit(id, visitIdRef.current, startTimeRef.current).catch(console.error);
-    }
-  };
-}, [id]); 
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+      if (visitIdRef.current && id && startTimeRef.current && !endedRef.current) {
+        endedRef.current = true;
+        endVisit(id, visitIdRef.current, startTimeRef.current).catch(console.error);
+      }
+    };
+  }, [id]);
 
   if (loading) {
     return (
